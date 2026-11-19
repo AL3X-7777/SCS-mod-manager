@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ETS2 / ATS Mod Cleaner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#14161a;--panel:#1d2026;--panel2:#252932;--line:#2f3440;--txt:#e8eaee;--dim:#9097a3;--keep:#2e9d5b;--del:#d64545;--acc:#4c8dff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+h1{font-size:17px;margin:0 12px 0 0;font-weight:600}
+button,select,input[type=search]{font:inherit;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:7px 12px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+input[type=search]{min-width:220px}
+#status{color:var(--dim);margin-left:auto}
+main{padding:16px 20px 110px;max-width:1200px;margin:0 auto}
+#empty{margin:80px auto;max-width:520px;text-align:center;color:var(--dim)}
+#empty h2{color:var(--txt);font-weight:600}
+code{background:var(--panel2);padding:1px 6px;border-radius:4px;color:var(--txt)}
+.card{display:flex;gap:16px;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--keep);border-radius:8px;padding:12px;margin-bottom:12px}
+.card.del{background:#8f1f26;border-left-color:#ff4d4d}
+.thumb{position:relative}
+.badge{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%) rotate(-8deg);text-align:center;background:var(--del);color:#fff;font-weight:700;letter-spacing:1px;padding:6px 0;font-size:14px;box-shadow:0 2px 8px #0008}
+.thumb{flex:0 0 240px;height:135px;background:#0c0d10;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.info{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.name{font-size:16px;font-weight:600;word-break:break-word}
+.meta{display:flex;flex-wrap:wrap;gap:4px 18px;color:var(--dim);font-size:13px}
+.meta b{color:var(--txt);font-weight:500}
+.desc{color:#c4c9d2;white-space:pre-wrap;word-break:break-word;max-height:4.4em;overflow:hidden;position:relative;font-size:13px}
+.desc.open{max-height:none}
+.more{align-self:flex-start;background:none;border:0;color:var(--acc);padding:0;font-size:12px}
+.chip{display:inline-block;background:var(--panel2);border-radius:10px;padding:0 8px;font-size:12px;color:var(--dim)}
+.choice{flex:0 0 120px;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.choice button{font-weight:600;padding:10px}
+.choice .k.on{background:var(--keep);border-color:var(--keep);color:#fff}
+.choice .d.on{background:var(--del);border-color:var(--del);color:#fff}
+#bar{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:12px 20px;display:flex;gap:14px;align-items:center;justify-content:center;z-index:6}
+label.chk{display:flex;gap:6px;align-items:center;color:var(--dim)}
+#modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:20}
+#modal .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;max-width:560px;width:92%;max-height:80vh;overflow:auto}
+#modal ul{padding-left:18px;color:var(--dim);max-height:240px;overflow:auto}
+#modal .row{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+@media(max-width:760px){.card{flex-direction:column}.thumb{flex:none;width:100%;height:180px}.choice{flex-direction:row;flex:none}.choice button{flex:1}}
+</style>
+</head>
+<body>
+<header>
+  <h1>ETS2 / ATS Mod Cleaner</h1>
+  <button id="pick" class="primary">Open mod folder…</button>
+  <input id="q" type="search" placeholder="Search name, file, author, description" disabled>
+  <select id="sort" disabled>
+    <option value="name">Sort: name</option>
+    <option value="file">Sort: file name</option>
+    <option value="author">Sort: author</option>
+    <option value="size">Sort: size (largest first)</option>
+  </select>
+  <select id="view" disabled>
+    <option value="all">Show: all</option>
+    <option value="keep">Show: keep</option>
+    <option value="del">Show: marked for delete</option>
+  </select>
+  <span id="status"></span>
+</header>
+<main>
+  <div id="empty">
+    <h2>Pick your mod folder</h2>
+    <p>Click <b>Open mod folder…</b> and choose<br><code>Documents\Euro Truck Simulator 2\mod</code><br>(or the same folder for American Truck Simulator).</p>
+    <p>Every mod starts as <b>Keep</b>. Mark the ones you don't want as <b>Delete</b>, then press <b>Delete marked mods</b> at the bottom. Nothing is removed until you confirm.</p>
+    <p id="unsupported" style="color:#e8a33d;display:none">This browser can't open folders. Use Chrome or Edge.</p>
+  </div>
+  <div id="list"></div>
+</main>
+<div id="bar" style="display:none">
+  <span id="count"></span>
+  <button id="allkeep">Reset all to Keep</button>
+  <label class="chk"><input type="checkbox" id="backup" checked> Move to <code>_removed_mods</code> instead of deleting permanently</label>
+  <button id="apply" class="primary" disabled>Delete marked mods</button>
+</div>
+<div id="modal"><div class="box">
+  <h3 id="mtitle" style="margin-top:0"></h3>
+  <div id="mbody"></div>
+  <div class="row"><button id="mno">Cancel</button><button id="myes" class="primary" style="background:var(--del);border-color:var(--del)">Confirm</button></div>
+</div></div>
+
+<script>
+/* ============ ZIP / manifest parsing (no libraries, works offline) ============ */
+async function readSlice(file, a, b){ return new Uint8Array(await file.slice(a, b).arrayBuffer()); }
+
+async function readZipIndex(file){
+  const size = file.size;
+  if (size < 22) throw new Error('too small');
+  const head = await readSlice(file, 0, 4);
+  if (head[0]===0x53 && head[1]===0x43 && head[2]===0x53 && head[3]===0x23) throw new Error('hashfs');
+  if (!(head[0]===0x50 && head[1]===0x4b)) throw new Error('notzip');
+  const tailStart = Math.max(0, size - (65535 + 22 + 20));
+  const tail = await readSlice(file, tailStart, size);
+  const dv = new DataView(tail.buffer);
+  let pos = -1;
+  for (let i = tail.length - 22; i >= 0; i--) { if (dv.getUint32(i, true) === 0x06054b50) { pos = i; break; } }
+  if (pos < 0) throw new Error('no EOCD');
+  let total = dv.getUint16(pos+10, true), cdSize = dv.getUint32(pos+12, true), cdOff = dv.getUint32(pos+16, true);
+  if (total === 0xFFFF || cdSize === 0xFFFFFFFF || cdOff === 0xFFFFFFFF) {
+    if (pos >= 20 && dv.getUint32(pos-20, true) === 0x07064b50) {
+      const z64off = Number(dv.getBigUint64(pos-20+8, true));
+      const z = await readSlice(file, z64off, z64off + 56);
+      const zv = new DataView(z.buffer);
+      if (zv.getUint32(0, true) !== 0x06064b50) throw new Error('bad zip64');
+      total = Number(zv.getBigUint64(32, true)); cdSize = Number(zv.getBigUint64(40, true)); cdOff = Number(zv.getBigUint64(48, true));
+    }
+  }
+  if (!(cdSize >= 0 && cdSize < 256e6 && cdOff >= 0 && cdOff + cdSize <= size)) throw new Error('bad central directory');
+  const cd = await readSlice(file, cdOff, cdOff + cdSize);
+  const cv = new DataView(cd.buffer);
+  const entries = new Map();
+  const dec = new TextDecoder('utf-8');
+  let p = 0;
+  while (p + 46 <= cd.length && cv.getUint32(p, true) === 0x02014b50) {
+    const flags = cv.getUint16(p+8, true), method = cv.getUint16(p+10, true);
+    let csize = cv.getUint32(p+20, true), usize = cv.getUint32(p+24, true);
+    const nl = cv.getUint16(p+28, true), el = cv.getUint16(p+30, true), cl = cv.getUint16(p+32, true);
+    let off = cv.getUint32(p+42, true);
+    const name = dec.decode(cd.subarray(p+46, p+46+nl)).replace(/\\/g, '/');
+    if (usize === 0xFFFFFFFF || csize === 0xFFFFFFFF || off === 0xFFFFFFFF) {
+      let q = p+46+nl; const end = q + el;
+      while (q + 4 <= end) {
+        const id = cv.getUint16(q, true), len = cv.getUint16(q+2, true);
+        if (id === 1) {
+          let r = q + 4;
+          if (usize === 0xFFFFFFFF) { usize = Number(cv.getBigUint64(r, true)); r += 8; }
+          if (csize === 0xFFFFFFFF) { csize = Number(cv.getBigUint64(r, true)); r += 8; }
+          if (off === 0xFFFFFFFF)   { off   = Number(cv.getBigUint64(r, true)); r += 8; }
+        }
+        q += 4 + len;
+      }
+    }
+    if (!name.endsWith('/')) entries.set(name.toLowerCase(), { name, flags, method, csize, usize, off });
+    p += 46 + nl + el + cl;
+  }
+  return entries;
+}
+
+async function readEntry(file, e){
+  if (e.flags & 1) throw new Error('encrypted entry');
+  const h = await readSlice(file, e.off, e.off + 30);
+  const hv = new DataView(h.buffer);
+  if (hv.getUint32(0, true) !== 0x04034b50) throw new Error('bad local header');
+  const start = e.off + 30 + hv.getUint16(26, true) + hv.getUint16(28, true);
+  const raw = await readSlice(file, start, start + e.csize);
+  if (e.method === 0) return raw;
+  if (e.method === 8) {
+    const ds = new DecompressionStream('deflate-raw');
+    return new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(ds)).arrayBuffer());
+  }
+  throw new Error('unsupported compression');
+}
+
+function decodeText(bytes){
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch (e) { return new TextDecoder('windows-1252').decode(bytes); }
+}
+
+function parseManifest(text){
+  const out = { desc: [] };
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)(\[\d*\])?\s*:\s*(.*?)\s*$/);
+    if (!m) continue;
+    let v = m[3];
+    if (v.startsWith('"')) { const e = v.lastIndexOf('"'); v = v.slice(1, e > 0 ? e : undefined).replace(/\\"/g, '"').replace(/\\n/g, '\n'); }
+    const k = m[1].toLowerCase();
+    if (m[2]) { if (k === 'description') out.desc.push(v); else (out[k] ||= []).push(v); }
+    else if (!(k in out)) out[k] = v;
+  }
+  return out;
+}
+
+async function inspectMod(file){
+  const info = { compat: [], name: '', version: '', author: '', category: '', desc: '', icon: null, note: '' };
+  let idx;
+  try { idx = await readZipIndex(file); }
+  catch (err) {
+    info.note = err.message === 'hashfs' ? 'Native SCS archive – details can\'t be read, only file name shown.' : 'Could not read archive (' + err.message + ').';
+    return info;
+  }
+  const man = idx.get('manifest.sii');
+  let mf = {};
+  if (man && man.usize < 2e6) {
+    try {
+      const txt = decodeText(await readEntry(file, man)).replace(/^\uFEFF/, '');
+      if (txt.includes('{')) mf = parseManifest(txt); else info.note = 'manifest.sii is not plain text.';
+    } catch (e) { info.note = 'manifest unreadable'; }
+  } else if (!man) info.note = 'No manifest.sii found.';
+  info.name = mf.display_name || '';
+  info.version = mf.package_version || mf.mod_version || '';
+  info.author = mf.author || '';
+  info.category = Array.isArray(mf.category) ? mf.category.join(', ') : (mf.category || '');
+  info.compat = Array.isArray(mf.compatible_versions) ? mf.compatible_versions : (mf.compatible_versions ? [mf.compatible_versions] : []);
+  let desc = '';
+  if (mf.description_file) {
+    const d = idx.get(String(mf.description_file).replace(/\\/g, '/').replace(/^\//, '').toLowerCase());
+    if (d && d.usize < 1e6) { try { desc = decodeText(await readEntry(file, d)); } catch (e) {} }
+  }
+  if (!desc && mf.desc && mf.desc.length) desc = mf.desc.join('\n');
+  info.desc = desc.replace(/^﻿/, '').trim();
+  const cands = [];
+  if (mf.icon) cands.push(String(mf.icon).replace(/\\/g, '/').replace(/^\//, '').toLowerCase());
+  cands.push('mod_icon.jpg', 'mod_icon.png', 'mod_icon.jpeg', 'mod_manager.jpg', 'mod_manager.png', 'icon.jpg', 'icon.png');
+  for (const [k, e] of idx) if (!k.includes('/') && /\.(jpe?g|png)$/.test(k)) cands.push(k);
+  for (const c of cands) {
+    const e = idx.get(c);
+    if (e && /\.(jpe?g|png)$/.test(c) && e.usize < 15e6) {
+      try {
+        const bytes = await readEntry(file, e);
+        info.icon = new Blob([bytes], { type: c.endsWith('png') ? 'image/png' : 'image/jpeg' });
+        break;
+      } catch (err) {}
+    }
+  }
+  if (!info.icon && mf.icon && /\.(tga|dds)$/i.test(mf.icon)) info.note = (info.note ? info.note + ' ' : '') + 'Thumbnail is TGA/DDS (browser can\'t show it).';
+  return info;
+}
+/* ===== END PARSING ===== */
+
+/* ============ UI ============ */
+const $ = s => document.querySelector(s);
+let dirHandle = null, mods = [], scanId = 0, busy = false;
+
+function fmtSize(n){ const u=['B','KB','MB','GB']; let i=0; while(n>=1024&&i<3){n/=1024;i++;} return n.toFixed(i?1:0)+' '+u[i]; }
+
+if (!window.showDirectoryPicker) $('#unsupported').style.display = 'block';
+
+$('#pick').onclick = async () => {
+  if (!window.showDirectoryPicker) return;
+  try { dirHandle = await showDirectoryPicker({ mode: 'readwrite', id: 'ets2mods', startIn: 'documents' }); }
+  catch (e) { return; }
+  await scan();
+};
+
+function debounce(fn, ms){ let t; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; }
+
+async function scan(){
+  const my = ++scanId;
+  mods.forEach(m => m.url && URL.revokeObjectURL(m.url));
+  mods = []; $('#list').textContent = '';
+  $('#empty').style.display = 'none';
+  const handles = [];
+  for await (const [name, h] of dirHandle.entries()) {
+    if (h.kind === 'file' && /\.(scs|zip)$/i.test(name)) handles.push(h);
+  }
+  handles.sort((a, b) => a.name.localeCompare(b.name));
+  if (!handles.length) { $('#empty').style.display = 'block'; $('#empty').innerHTML = '<h2>No .scs mods found in that folder</h2><p>Pick the folder that directly contains your mod files.</p>'; return; }
+  ['#q','#sort','#view'].forEach(s => $(s).disabled = false);
+  $('#bar').style.display = 'flex';
+  let done = 0, lastRender = 0; const total = handles.length;
+  $('#status').textContent = `Reading 0 / ${total}…`;
+  let next = 0;
+  async function worker(){
+    while (next < handles.length && my === scanId) {
+      const h = handles[next++];
+      const mod = { handle: h, fileName: h.name, mark: 'keep', url: null };
+      try {
+        const file = await h.getFile();
+        mod.file = file; mod.size = file.size;
+        mod.info = await inspectMod(file);
+        if (mod.info.icon) mod.url = URL.createObjectURL(mod.info.icon);
+      } catch (e) { mod.size = 0; mod.info = { name:'', version:'', author:'', category:'', desc:'', note:'Could not open file: ' + e.message }; }
+      if (my !== scanId) { if (mod.url) URL.revokeObjectURL(mod.url); return; }
+      mods.push(mod);
+      done++;
+      const now = Date.now();
+      if (now - lastRender > 500 || done === total) { lastRender = now; $('#status').textContent = done < total ? `Reading ${done} / ${total}…` : `${total} mods`; render(); }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (my === scanId) render();
+}
+
+function matches(m, q){
+  if (!q) return true;
+  const i = m.info;
+  return (i.name + ' ' + m.fileName + ' ' + i.author + ' ' + i.desc).toLowerCase().includes(q);
+}
+
+function render(){
+  const q = $('#q').value.trim().toLowerCase(), view = $('#view').value, sort = $('#sort').value;
+  const key = m => sort==='file' ? m.fileName.toLowerCase() : sort==='author' ? (m.info.author||'~').toLowerCase() : (m.info.name || m.fileName).toLowerCase();
+  const list = mods.filter(m => matches(m, q) && (view==='all' || m.mark===view))
+    .sort((a, b) => sort==='size' ? b.size - a.size : key(a).localeCompare(key(b)));
+  const root = $('#list'); root.textContent = '';
+  const frag = document.createDocumentFragment();
+  for (const m of list) frag.appendChild(card(m));
+  root.appendChild(frag);
+  updateBar();
+}
+
+function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+function card(m){
+  const i = m.info;
+  const c = el('div', 'card' + (m.mark==='del' ? ' del' : ''));
+  const t = el('div', 'thumb');
+  if (m.url) { const im = el('img'); im.src = m.url; im.alt = ''; im.loading = 'lazy'; t.appendChild(im); } else t.textContent = 'No thumbnail';
+  const inf = el('div', 'info');
+  inf.appendChild(el('div', 'name', i.name || m.fileName));
+  const meta = el('div', 'meta');
+  const add = (label, val) => { const s = el('span'); s.appendChild(document.createTextNode(label + ': ')); s.appendChild(el('b', null, val || '—')); meta.appendChild(s); };
+  add('File', m.fileName); add('Version', i.version); add('Author', i.author); add('Size', fmtSize(m.size));
+  inf.appendChild(meta);
+  if (i.compat && i.compat.length) {
+    const cm = el('div', 'meta'); const s = el('span'); s.appendChild(document.createTextNode('Compatible with: '));
+    s.appendChild(el('b', null, i.compat.join(', '))); cm.appendChild(s); inf.appendChild(cm);
+  }
+  if (i.category) inf.appendChild(el('span', 'chip', i.category));
+  if (i.desc) {
+    const d = el('div', 'desc', i.desc); inf.appendChild(d);
+    if (i.desc.length > 220 || i.desc.split('\n').length > 3) {
+      const b = el('button', 'more', 'Show more'); b.onclick = () => { d.classList.toggle('open'); b.textContent = d.classList.contains('open') ? 'Show less' : 'Show more'; };
+      inf.appendChild(b);
+    }
+  } else inf.appendChild(el('div', 'desc', 'No description.'));
+  if (i.note) inf.appendChild(el('div', 'meta', i.note));
+  const ch = el('div', 'choice');
+  const k = el('button', 'k' + (m.mark==='keep' ? ' on' : ''), 'Keep');
+  const d = el('button', 'd' + (m.mark==='del' ? ' on' : ''), 'Delete');
+  k.onclick = () => setMark(m, 'keep'); d.onclick = () => setMark(m, 'del');
+  ch.append(k, d);
+  c.append(t, inf, ch);
+  m.card = c;
+  return c;
+}
+
+function setMark(m, v){
+  if (busy) return;
+  m.mark = v;
+  if ($('#view').value !== 'all') render();
+  else { const old = m.card; const n = card(m); old.replaceWith(n); updateBar(); }
+}
+
+function updateBar(){
+  const del = mods.filter(m => m.mark === 'del');
+  const sz = del.reduce((a, m) => a + m.size, 0);
+  $('#count').textContent = del.length ? `${del.length} marked for delete (${fmtSize(sz)})` : 'Nothing marked for delete';
+  $('#apply').disabled = !del.length;
+}
+
+$('#q').oninput = debounce(render, 150); $('#sort').onchange = render; $('#view').onchange = render;
+$('#allkeep').onclick = () => { if (busy) return; mods.forEach(m => m.mark = 'keep'); render(); };
+
+function ask(title, bodyNode, yes){
+  return new Promise(res => {
+    $('#mtitle').textContent = title;
+    const b = $('#mbody'); b.textContent = ''; b.appendChild(bodyNode);
+    $('#myes').textContent = yes; $('#mno').style.display = '';
+    $('#modal').style.display = 'flex';
+    $('#myes').onclick = () => { $('#modal').style.display = 'none'; res(true); };
+    $('#mno').onclick = () => { $('#modal').style.display = 'none'; res(false); };
+  });
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#modal').style.display === 'flex') $('#mno').click(); });
+
+async function exists(d, n){ try { await d.getFileHandle(n); return true; } catch (e) { return e.name !== 'NotFoundError'; } }
+
+$('#apply').onclick = async () => {
+  if (busy) return;
+  const del = mods.filter(m => m.mark === 'del');
+  const backup = $('#backup').checked;
+  const body = el('div');
+  body.appendChild(el('p', null, backup
+    ? `These ${del.length} mod(s) will be moved into a "_removed_mods" folder inside your mod folder. You can restore them from there.`
+    : `These ${del.length} mod(s) will be PERMANENTLY deleted. This cannot be undone.`));
+  const ul = el('ul'); del.forEach(m => ul.appendChild(el('li', null, `${m.info.name || m.fileName}  (${m.fileName}, ${fmtSize(m.size)})`)));
+  body.appendChild(ul);
+  if (!(await ask(backup ? 'Move marked mods?' : 'Permanently delete marked mods?', body, backup ? 'Move them' : 'Delete forever'))) return;
+
+  busy = true; $('#apply').disabled = true; $('#pick').disabled = true;
+  const failed = []; let ok = 0;
+  let bdir = null;
+  for (const m of del) {
+    $('#status').textContent = `${backup ? 'Moving' : 'Deleting'} ${ok + failed.length + 1} / ${del.length}…`;
+    try {
+      if (backup) {
+        bdir ||= await dirHandle.getDirectoryHandle('_removed_mods', { create: true });
+        let name = m.fileName;
+        if (await exists(bdir, name)) name = Date.now() + '_' + name;
+        let moved = false;
+        // Fast path: a real rename inside the same folder tree is instant, whatever the file size.
+        if (typeof m.handle.move === 'function') {
+          try { await m.handle.move(bdir, name); moved = true; } catch (e) { moved = false; }
+        }
+        if (!moved) {
+          // Fallback: copy, verify the size, and only then remove the original.
+          const fh = await bdir.getFileHandle(name, { create: true });
+          try {
+            const w = await fh.createWritable();
+            await m.file.stream().pipeTo(w);
+            if ((await fh.getFile()).size !== m.file.size) throw new Error('copy size mismatch');
+          } catch (e) { try { await bdir.removeEntry(name); } catch (_) {} throw e; }
+          await dirHandle.removeEntry(m.fileName);
+        }
+      } else {
+        await dirHandle.removeEntry(m.fileName);
+      }
+      if (m.url) URL.revokeObjectURL(m.url);
+      mods = mods.filter(x => x !== m);
+      ok++;
+    } catch (e) { failed.push(`${m.fileName}: ${e.message}`); }
+  }
+  busy = false; $('#pick').disabled = false;
+  render();
+  $('#status').textContent = `${mods.length} mods`;
+  const r = el('div');
+  r.appendChild(el('p', null, `${ok} mod(s) ${backup ? 'moved' : 'deleted'}.` + (failed.length ? ` ${failed.length} failed (is the game running?):` : '')));
+  if (failed.length) { const ul2 = el('ul'); failed.forEach(f => ul2.appendChild(el('li', null, f))); r.appendChild(ul2); }
+  $('#mno').style.display = 'none';
+  await ask('Done', r, 'OK');
+};
+</script>
+</body>
+</html>
